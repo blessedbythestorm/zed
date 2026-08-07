@@ -564,6 +564,9 @@ impl PrimitiveBatch {
                 )
             }
             Self::Surfaces(range) => format!("surfaces ({})", range.len()),
+            Self::ExternalCompositors(range) => {
+                format!("external compositors ({})", range.len())
+            }
         }
     }
 }

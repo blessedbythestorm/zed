@@ -1281,18 +1281,19 @@ impl WgpuRenderer {
             &shader_module,
         );
 
-        // Reuses `instances_with_texture`: the layout (storage buffer + filterable
-        // texture + sampler) is identical to what mono/poly sprites and paths need,
-        // and the shader reuses the `t_sprite`/`s_sprite` bindings those pipelines
-        // already declare. Blend state matches poly_sprites: the fragment shader
-        // always emits premultiplied color (converting from straight alpha itself
-        // when the slot's `AlphaMode` requires it).
+        // Reuses the sprite bind group layouts: instances plus a filterable
+        // texture + sampler, with the shader reusing the `t_sprite`/`s_sprite`
+        // bindings those pipelines already declare. Blend state matches
+        // poly_sprites: the fragment shader always emits premultiplied color
+        // (converting from straight alpha itself when the slot's `AlphaMode`
+        // requires it).
         let external_compositors = create_pipeline(
             "external_compositors",
             "vs_external_compositor",
             "fs_external_compositor",
             &layouts.globals,
-            &layouts.instances_with_texture,
+            &layouts.instances,
+            Some(&layouts.texture),
             wgpu::PrimitiveTopology::TriangleStrip,
             &[Some(color_target)],
             1,
