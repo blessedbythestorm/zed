@@ -732,6 +732,13 @@ impl MetalRenderer {
                     command_encoder,
                 ),
                 PrimitiveBatch::SubpixelSprites { .. } => unreachable!(),
+                PrimitiveBatch::ExternalCompositors(_) => {
+                    // External composition is not implemented on Metal in this
+                    // phase (gpui_wgpu/Linux only); the element's background quad
+                    // (painted before this primitive when set via
+                    // `ExternalCompositorElement::background`) is left showing
+                    // instead.
+                }
             }
         }
 

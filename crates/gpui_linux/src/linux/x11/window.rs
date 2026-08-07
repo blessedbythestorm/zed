@@ -3,11 +3,12 @@ use x11rb::connection::RequestConnection;
 
 use crate::linux::X11ClientStatePtr;
 use gpui::{
-    AnyWindowHandle, Bounds, Decorations, DevicePixels, ForegroundExecutor, GpuSpecs, Modifiers,
-    Pixels, PlatformAtlas, PlatformDisplay, PlatformInput, PlatformInputHandler, PlatformWindow,
-    Point, PromptButton, PromptLevel, RequestFrameOptions, ResizeEdge, ScaledPixels, Scene, Size,
-    Tiling, WindowAppearance, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
-    WindowDecorations, WindowKind, WindowParams, popup::PopupNotSupportedError, px,
+    AnyWindowHandle, Bounds, Decorations, DevicePixels, ExternalCompositorRegistry,
+    ForegroundExecutor, GpuSpecs, Modifiers, Pixels, PlatformAtlas, PlatformDisplay, PlatformInput,
+    PlatformInputHandler, PlatformWindow, Point, PromptButton, PromptLevel, RequestFrameOptions,
+    ResizeEdge, ScaledPixels, Scene, Size, Tiling, WindowAppearance, WindowBackgroundAppearance,
+    WindowBounds, WindowControlArea, WindowDecorations, WindowKind, WindowParams,
+    popup::PopupNotSupportedError, px,
 };
 use gpui_wgpu::{CompositorGpuHint, WgpuRenderer, WgpuSurfaceConfig};
 
@@ -269,6 +270,7 @@ pub struct X11WindowState {
     bounds: Bounds<Pixels>,
     scale_factor: f32,
     renderer: WgpuRenderer,
+    external_compositors: Rc<RefCell<ExternalCompositorRegistry>>,
     display: Rc<dyn PlatformDisplay>,
     input_handler: Option<PlatformInputHandler>,
     appearance: WindowAppearance,
@@ -710,6 +712,7 @@ impl X11WindowState {
 
             xcb_flush(xcb);
 
+            let external_compositors = Rc::new(RefCell::new(ExternalCompositorRegistry::new()));
             let mut renderer = {
                 let raw_window = RawWindow {
                     connection: as_raw_xcb_connection::AsRawXcbConnection::as_raw_xcb_connection(
@@ -730,7 +733,13 @@ impl X11WindowState {
                     transparent: false,
                     preferred_present_mode: None,
                 };
-                WgpuRenderer::new(gpu_context, &raw_window, config, compositor_gpu)?
+                WgpuRenderer::new(
+                    gpu_context,
+                    &raw_window,
+                    config,
+                    compositor_gpu,
+                    Some(Rc::clone(&external_compositors)),
+                )?
             };
 
             renderer.set_subpixel_layout(is_bgr);
@@ -791,6 +800,7 @@ impl X11WindowState {
                 bounds: bounds.to_pixels(scale_factor),
                 scale_factor,
                 renderer,
+                external_compositors,
                 atoms: *atoms,
                 input_handler: None,
                 active: false,
@@ -1603,6 +1613,7 @@ impl PlatformWindow for X11Window {
                 let state = ref_cell.borrow();
                 state
                     .gpu_context
+                    .context
                     .borrow()
                     .as_ref()
                     .is_some_and(|ctx| ctx.supports_dual_source_blending())
@@ -1733,6 +1744,11 @@ impl PlatformWindow for X11Window {
     fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas> {
         let inner = self.0.state.borrow();
         inner.renderer.sprite_atlas().clone()
+    }
+
+    fn external_compositor_registry(&self) -> Option<Rc<RefCell<ExternalCompositorRegistry>>> {
+        let inner = self.0.state.borrow();
+        Some(Rc::clone(&inner.external_compositors))
     }
 
     fn show_window_menu(&self, position: Point<Pixels>) {
