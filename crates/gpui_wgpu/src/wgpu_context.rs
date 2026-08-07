@@ -261,10 +261,25 @@ impl WgpuContext {
                 .using_resolution(adapter.limits())
                 .using_alignment(adapter.limits())
         };
+        // External compositors (e.g. vello) run compute pipelines that need the
+        // standard WebGPU limit tier — notably 8 storage buffers per shader
+        // stage, where downlevel_defaults grants only 4. Request the standard
+        // tier whenever the adapter supports it; GPUI's own renderer only needs
+        // the downlevel tier, so that remains the fallback.
         #[cfg(not(target_family = "wasm"))]
-        let required_limits = wgpu::Limits::downlevel_defaults()
-            .using_resolution(adapter.limits())
-            .using_alignment(adapter.limits());
+        let required_limits = {
+            let standard_limits = wgpu::Limits::default()
+                .using_resolution(adapter.limits())
+                .using_alignment(adapter.limits());
+
+            if standard_limits.check_limits(&adapter.limits()) {
+                standard_limits
+            } else {
+                wgpu::Limits::downlevel_defaults()
+                    .using_resolution(adapter.limits())
+                    .using_alignment(adapter.limits())
+            }
+        };
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
