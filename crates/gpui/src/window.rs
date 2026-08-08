@@ -2845,6 +2845,19 @@ impl Window {
     /// the contents of the new [`Scene`], use [`Self::present`].
     #[profiling::function]
     pub fn draw(&mut self, cx: &mut App) -> ArenaClearNeeded {
+        // Reconcile with live platform state: the platform delivers scale and
+        // size changes through a resize callback that goes via
+        // `AsyncApp::update`, which fails whenever `App` is already borrowed —
+        // and because the platform commits its own state before invoking the
+        // callback, the change never re-fires. Without this check a single
+        // dropped callback leaves the window laying out at a stale scale
+        // forever (observed on Wayland with mixed-DPI outputs).
+        if self.scale_factor != self.platform_window.scale_factor()
+            || self.viewport_size != self.platform_window.content_size()
+        {
+            self.bounds_changed(cx);
+        }
+
         // Advance the frame counter before painting so that elements painting an
         // external compositor primitive this frame (see `paint_external_compositor`)
         // record the frame that is about to be drawn, not the previous one.

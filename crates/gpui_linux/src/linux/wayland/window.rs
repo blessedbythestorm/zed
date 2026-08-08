@@ -655,14 +655,18 @@ impl WaylandWindowState {
     }
 
     pub fn primary_output_scale(&mut self) -> i32 {
+        // Consider only the outputs the surface currently occupies. Seeding
+        // from the previous `display` would pin the window to an output it
+        // has left whenever the new output has a lower scale (e.g. moving
+        // from a HiDPI monitor to a 1x one), leaving `display`, subpixel
+        // layout, and any scale derived from them stale.
         let mut scale = 1;
-        let mut current_output = self.display.take();
+        let mut current_output: Option<(ObjectId, Output)> = None;
         for (id, output) in self.outputs.iter() {
-            if let Some((_, output_data)) = &current_output {
-                if output.scale > output_data.scale {
-                    current_output = Some((id.clone(), output.clone()));
-                }
-            } else {
+            let higher_than_current = current_output
+                .as_ref()
+                .is_none_or(|(_, current)| output.scale > current.scale);
+            if higher_than_current {
                 current_output = Some((id.clone(), output.clone()));
             }
             scale = scale.max(output.scale);
