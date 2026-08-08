@@ -278,6 +278,16 @@ pub struct InProgressOutput {
 }
 
 impl InProgressOutput {
+    fn from_output(output: &Output) -> Self {
+        Self {
+            name: output.name.clone(),
+            scale: Some(output.scale),
+            position: Some(output.bounds.origin),
+            size: Some(output.bounds.size),
+            subpixel: output.subpixel,
+        }
+    }
+
     fn complete(&self) -> Option<Output> {
         if let Some((position, size)) = self.position.zip(self.size) {
             let scale = self.scale.unwrap_or(1);
@@ -1443,6 +1453,17 @@ impl Dispatch<wl_output::WlOutput, ()> for WaylandClientStatePtr {
         let client = this.get_client();
         let mut state = client.borrow_mut();
 
+        // Compositors re-announce output properties at runtime (a monitor's
+        // scale or mode changed in settings). Reopen the atomic in-progress
+        // record from the last committed state so the update lands on the
+        // next Done instead of being dropped for the process's lifetime.
+        if !state.in_progress_outputs.contains_key(&output.id()) {
+            let Some(existing) = state.outputs.get(&output.id()) else {
+                return;
+            };
+            let reopened = InProgressOutput::from_output(existing);
+            state.in_progress_outputs.insert(output.id(), reopened);
+        }
         let Some(in_progress_output) = state.in_progress_outputs.get_mut(&output.id()) else {
             return;
         };
